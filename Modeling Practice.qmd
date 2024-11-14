@@ -1,0 +1,139 @@
+---
+title: "Modeling Practice"
+format: html
+editor: visual
+---
+
+## EDA
+
+First, we need to read in the data. 
+
+```{r}
+library(readr)
+
+bike_data <- readr::read_csv("SeoulBikeData.csv", locale = locale(encoding="latin1"))
+```
+Before we can do any analysis, we need to make sure there are not any missing values in our data. 
+
+```{r}
+colSums(is.na(bike_data))
+```
+
+Luckily there appears to be no missing data! Next, let's check the column types to make sure the values within the columns make sense. 
+
+```{r}
+bike_data
+```
+
+The data in the `Hour` column should really be of type "character", since it is representing the hour in a day, which will always be between 0 and 23. 
+
+Additionally, the `Date` column needs to be converted to actual dates. 
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+bike_data <- bike_data |>
+  mutate(Hour = as.character(Hour),
+         Date = mdy(Date))
+bike_data
+```
+
+It also seems like it would be a good idea to coerce the data in `Seasons`, `Holiday`, and `Functioning Day` to be factors since they only take on a few distinct, non-numeric values. 
+
+```{r}
+bike_data <- bike_data |>
+  mutate(Seasons = as.factor(Seasons),
+         Holiday = as.factor(Holiday),
+         `Functioning Day` = as.factor(`Functioning Day`))
+bike_data
+```
+
+Lastly, let's rename the variables in lower snake case. 
+
+```{r}
+bike_data <- bike_data |>
+  rename("date" = "Date", "rented_bike_count" = "Rented Bike Count", "hour"
+         = "Hour", "temperature" = "Temperature(°C)", "humidity" = 
+         "Humidity(%)", "wind_speed" = "Wind speed (m/s)", "visibility" =
+         "Visibility (10m)", "dew_point_temperature" = 
+           "Dew point temperature(°C)", "solar_radiation" = 
+           "Solar Radiation (MJ/m2)",
+         "rainfall" = "Rainfall(mm)", "snowfall" = "Snowfall (cm)", 
+         "seasons" = "Seasons", "holiday" = "Holiday", "functioning_day" = 
+         "Functioning Day")
+bike_data
+```
+
+Now, grouping by `date`, `seasons`, and `holiday`, we will compute the sum of `rented_bike_count`, `rainfall`, and `snowfall`, and also compute the mean of all weather related variables. The data we obtain by doing this will be the data that we do modeling on. 
+
+```{r}
+bike_data <- bike_data |>
+  group_by(date, seasons, holiday) |>
+  summarize(across(c(rented_bike_count, rainfall, snowfall), 
+                   list("sum" = sum), 
+                   .names = "{.fn}_{.col}"),
+            across(c(temperature, humidity, wind_speed,
+                     dew_point_temperature, solar_radiation,
+                     rainfall, snowfall),
+                   list("mean" = mean),
+                   .names = "{.fn}_{.col}"))
+```
+
+## Data Split
+
+First, we split the data into a training and test set (using a 75/25 split). 
+
+```{r}
+library(tidymodels)
+
+set.seed(1)
+bike_split <- initial_split(bike_data, prop = 0.75, strata = seasons)
+bike_train <- training(bike_split)
+bike_test <- testing(bike_split)
+```
+
+Next, on the training set, we want to create a 10 fold CV split. The function below takes as input data and the number folds we want, and outputs a CV split. 
+
+```{r}
+get_cv_splits <- function(data, num_folds){
+  #get fold size
+  size_fold <- floor(nrow(data)/num_folds)
+  #get random indices to subset the data with
+  random_indices <- sample(1:nrow(data), size = nrow(data), replace = FALSE)
+  #create a list to save our folds in
+  folds <- list()
+  #now cycle through our random indices vector and take the appropriate observations to each fold
+  for(i in 1:num_folds){
+    if (i < num_folds) {
+      fold_index <- seq(from = (i-1)*size_fold +1, to = i*size_fold, by = 1)
+      folds[[i]] <- data[random_indices[fold_index], ]
+    } else {
+      fold_index <- seq(from = (i-1)*size_fold +1, to = length(random_indices), by = 1)
+      folds[[i]] <- data[random_indices[fold_index], ]
+    }
+  }
+  return(folds)
+}
+```
+
+Therefore, our 10 fold CV split is given by:
+
+```{r}
+folds <- get_cv_splits(bike_train, 10)
+```
+
+
+## Fitting MLR Models
+
+
+
+
+
+
+
+
+
+
+
+
